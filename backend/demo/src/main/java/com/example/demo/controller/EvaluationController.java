@@ -10,9 +10,9 @@ import com.example.demo.service.EvaluationPersistenceService;
 import com.example.demo.service.ProjectEvaluationService;
 import com.example.demo.service.StockEvaluationService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -85,7 +85,7 @@ public class EvaluationController {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public Map<String, String> handleValidation(MethodArgumentNotValidException exception) {
         FieldError fieldError = exception.getBindingResult().getFieldErrors().stream().findFirst().orElse(null);
-        String message = fieldError == null ? "입력값을 다시 확인해주세요." : fieldError.getDefaultMessage();
+        String message = fieldError == null ? "입력값을 다시 확인해 주세요." : fieldError.getDefaultMessage();
         return Map.of("message", message);
     }
 }

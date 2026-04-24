@@ -36,7 +36,14 @@ const metricDescriptions = {
   npv: "미래 현금흐름의 현재가치 합에서 초기 투자비를 뺀 값입니다.",
   irr: "순현재가치를 0으로 만드는 내부수익률입니다.",
   paybackPeriod: "초기 투자금을 회수하는 데 걸리는 기간입니다.",
-  riskScore: "내부 규칙 기반 종합 위험 점수입니다.",
+  riskScore: "내부 규칙 기반 종합점수입니다. 점수가 높을수록 수익성과 안정성의 균형이 좋고 상대적으로 안전한 편으로 해석합니다.",
+};
+
+const gradeClassMap = {
+  안전: "safe",
+  보통: "normal",
+  주의: "caution",
+  위험: "danger",
 };
 
 function toNumber(value) {
@@ -54,7 +61,7 @@ function formatMoneyLabel(value) {
   const numeric = toNumber(value);
   if (!numeric) return "0원";
   if (Math.abs(numeric) >= 100000000) {
-    return `${(numeric / 100000000).toFixed(1)}억 원`;
+    return `${(numeric / 100000000).toFixed(1)}억원`;
   }
   return `${numeric.toLocaleString("ko-KR")}원`;
 }
@@ -69,6 +76,13 @@ function adjustByPercent(value, direction, minimum = 0) {
   const numeric = toNumber(value);
   const adjusted = Math.round(numeric * (1 + 0.01 * direction));
   return Math.max(adjusted, minimum);
+}
+
+function normalizeEvaluationType(type) {
+  if (type === "주식" || type === "stock") return "주식";
+  if (type === "채권" || type === "bond") return "채권";
+  if (type === "프로젝트" || type === "project") return "프로젝트";
+  return type;
 }
 
 function stockScenarios(form) {
@@ -96,8 +110,7 @@ function bondScenarios(form, result) {
   const duration = result.duration;
   const convexity = result.convexity;
 
-  const estimatePrice = (deltaYield) =>
-    price * (1 - duration * deltaYield + 0.5 * convexity * deltaYield * deltaYield);
+  const estimatePrice = (deltaYield) => price * (1 - duration * deltaYield + 0.5 * convexity * deltaYield * deltaYield);
 
   return [
     { name: "기준", yieldValue: baseYield, estimatedPrice: price },
@@ -136,12 +149,21 @@ function projectScenarios(form) {
   ];
 }
 
+function InlineInfo({ text }) {
+  return (
+    <span className="info-chip inline-info" tabIndex={0}>
+      i
+      <span className="tooltip-panel">{text}</span>
+    </span>
+  );
+}
+
 function MetricCard({ item }) {
   return (
     <div className="metric-card">
       <div className="metric-label-row">
         <span>{item.label}</span>
-        <span className="info-chip">
+        <span className="info-chip" tabIndex={0}>
           i
           <span className="tooltip-panel">{metricDescriptions[item.key] || `${item.label} 설명`}</span>
         </span>
@@ -168,72 +190,79 @@ function MoneyField({ label, value, onChange, onAdjust, wide = false }) {
   );
 }
 
-function NumberField({ label, value, onChange, step = "1" }) {
+function NumberField({ label, value, onChange, step = "1", infoText = "" }) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <span className="field-label-with-info">
+        {label}
+        {infoText ? <InlineInfo text={infoText} /> : null}
+      </span>
       <input type="number" step={step} value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
 
 function CashFlowList({ cashFlows, onChange }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div className="cashflow-section field-span-2">
       <div className="cashflow-header">
         <div>
           <span className="cashflow-title">연도별 현금흐름</span>
-          <p>각 연차에 유입될 것으로 가정한 현금흐름입니다.</p>
+          <p>각 연차에 유입될 것으로 가정한 현금흐름입니다. <br /> 오른쪽 버튼으로 입력란을 펼칠 수 있습니다.</p>
         </div>
+        <button type="button" className="cashflow-header-toggle" onClick={() => setExpanded((prev) => !prev)}>
+          <span className="cashflow-toggle-indicator">{expanded ? "접기" : "펼치기"}</span>
+        </button>
       </div>
-      <div className="cashflow-list">
-        {cashFlows.map((value, index) => (
-          <label className="cashflow-row" key={`year-${index + 1}`}>
-            <span className="cashflow-year">{index + 1}년차</span>
-            <div className="cashflow-input-wrap">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={formatMoney(value)}
-                onChange={(e) => {
-                  const next = [...cashFlows];
-                  next[index] = toNumber(e.target.value);
-                  onChange(next);
-                }}
-              />
-              <small>{formatMoneyLabel(value)}</small>
-            </div>
-          </label>
-        ))}
+      <div className={`cashflow-list-wrap ${expanded ? "expanded" : ""}`}>
+        <div className="cashflow-list">
+          {cashFlows.map((value, index) => (
+            <label className="cashflow-row" key={`year-${index + 1}`}>
+              <span className="cashflow-year">{index + 1}년차</span>
+              <div className="cashflow-input-wrap">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={formatMoney(value)}
+                  onChange={(e) => {
+                    const next = [...cashFlows];
+                    next[index] = toNumber(e.target.value);
+                    onChange(next);
+                  }}
+                />
+                <small>{formatMoneyLabel(value)}</small>
+              </div>
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
 function buildMetricItems(result) {
+  const type = normalizeEvaluationType(result.evaluationType);
   const base = [
     { key: "presentValue", label: "평가금액", value: result.presentValue, isMoney: true },
     { key: "riskMetricValue", label: result.riskMetricName, value: result.riskMetricValue, isMoney: true },
-    { key: "riskScore", label: "위험점수", value: result.riskScore },
+    { key: "riskScore", label: "종합점수", value: result.riskScore },
   ];
 
-  if (result.evaluationType === "주식") return base;
-  if (result.evaluationType === "채권") {
+  if (type === "주식") return base;
+  if (type === "채권") {
     return [...base, { key: "duration", label: "듀레이션", value: result.duration }, { key: "convexity", label: "컨벡서티", value: result.convexity }];
   }
-  if (result.evaluationType === "프로젝트") {
+  if (type === "프로젝트") {
     return [...base, { key: "npv", label: "NPV", value: result.npv, isMoney: true }, { key: "irr", label: "IRR", value: result.irr }, { key: "paybackPeriod", label: "회수기간", value: result.paybackPeriod }];
   }
   return base;
 }
 
 function SensitivityPanel({ result, inputs }) {
-  const scenarios =
-    result.evaluationType === "주식"
-      ? stockScenarios(inputs)
-      : result.evaluationType === "채권"
-        ? bondScenarios(inputs, result)
-        : projectScenarios(inputs);
+  const type = normalizeEvaluationType(result.evaluationType);
+  const scenarios = type === "주식" ? stockScenarios(inputs) : type === "채권" ? bondScenarios(inputs, result) : projectScenarios(inputs);
 
   return (
     <div className="detail-panel">
@@ -243,19 +272,19 @@ function SensitivityPanel({ result, inputs }) {
         {scenarios.map((scenario) => (
           <div className="scenario-card" key={scenario.name}>
             <strong>{scenario.name}</strong>
-            {result.evaluationType === "주식" ? (
+            {type === "주식" ? (
               <>
                 <span>기대가치: {formatMetric(scenario.expectedValue, true)}</span>
                 <span>VaR 95%: {formatMetric(scenario.riskMetricValue, true)}</span>
               </>
             ) : null}
-            {result.evaluationType === "채권" ? (
+            {type === "채권" ? (
               <>
                 <span>시장수익률: {(scenario.yieldValue * 100).toFixed(2)}%</span>
                 <span>추정 채권가치: {formatMetric(scenario.estimatedPrice, true)}</span>
               </>
             ) : null}
-            {result.evaluationType === "프로젝트" ? (
+            {type === "프로젝트" ? (
               <>
                 <span>할인율: {(scenario.rate * 100).toFixed(2)}%</span>
                 <span>NPV: {formatMetric(scenario.npv, true)}</span>
@@ -270,11 +299,13 @@ function SensitivityPanel({ result, inputs }) {
 }
 
 function InputSummary({ result, inputs }) {
+  const type = normalizeEvaluationType(result.evaluationType);
+
   return (
     <div className="detail-panel">
       <h4>입력값 요약</h4>
       <div className="input-summary">
-        {result.evaluationType === "주식" ? (
+        {type === "주식" ? (
           <>
             <span>현재 주가: {formatMoneyLabel(inputs.currentPrice)}</span>
             <span>기대 연수익률: {(Number(inputs.expectedAnnualReturn) * 100).toFixed(2)}%</span>
@@ -282,7 +313,7 @@ function InputSummary({ result, inputs }) {
             <span>보유일수: {inputs.holdingDays}일</span>
           </>
         ) : null}
-        {result.evaluationType === "채권" ? (
+        {type === "채권" ? (
           <>
             <span>액면가: {formatMoneyLabel(inputs.faceValue)}</span>
             <span>쿠폰금리: {(Number(inputs.couponRate) * 100).toFixed(2)}%</span>
@@ -290,7 +321,7 @@ function InputSummary({ result, inputs }) {
             <span>만기: {inputs.maturityYears}년</span>
           </>
         ) : null}
-        {result.evaluationType === "프로젝트" ? (
+        {type === "프로젝트" ? (
           <>
             <span>초기 투자비: {formatMoneyLabel(inputs.initialInvestment)}</span>
             <span>할인율: {(Number(inputs.discountRate) * 100).toFixed(2)}%</span>
@@ -308,19 +339,21 @@ function ResultPanel({ title, result, inputs, onSave, onToggleDetail, detailOpen
     return (
       <section className="result-panel empty">
         <h3>{title}</h3>
-        <p>평가 실행 후 결과와 DB 저장 버튼이 표시됩니다.</p>
+        <p>평가를 실행하면 결과와 DB 저장 버튼이 표시됩니다.</p>
       </section>
     );
   }
+
+  const gradeClass = gradeClassMap[result.riskGrade] || "normal";
 
   return (
     <section className="result-panel">
       <div className="result-header">
         <div>
-          <p className="eyebrow">{result.evaluationType}</p>
+          <p className="eyebrow">{normalizeEvaluationType(result.evaluationType)}</p>
           <h3>{result.targetName}</h3>
         </div>
-        <div className={`grade grade-${result.riskGrade}`}>{result.riskGrade}</div>
+        <div className={`grade grade-${gradeClass}`}>{result.riskGrade}</div>
       </div>
 
       <div className="metric-grid compact-grid">
@@ -335,7 +368,7 @@ function ResultPanel({ title, result, inputs, onSave, onToggleDetail, detailOpen
       </div>
 
       <div className="commentary-block">
-        <h4>종합 의견</h4>
+        <h4>종합 해석</h4>
         <p>{result.commentary}</p>
       </div>
 
@@ -367,7 +400,7 @@ function ResultPanel({ title, result, inputs, onSave, onToggleDetail, detailOpen
 function RecentSection({ items }) {
   const grouped = ["주식", "채권", "프로젝트"].map((type) => ({
     type,
-    items: items.filter((item) => item.evaluationType === type),
+    items: items.filter((item) => normalizeEvaluationType(item.evaluationType) === type),
   }));
 
   return (
@@ -387,7 +420,7 @@ function RecentSection({ items }) {
               group.items.map((item, index) => (
                 <article className="recent-card" key={`${group.type}-${item.targetName}-${index}`}>
                   <div className="recent-top">
-                    <span>{item.evaluationType}</span>
+                    <span>{normalizeEvaluationType(item.evaluationType)}</span>
                     <strong>{item.riskGrade}</strong>
                   </div>
                   <h3>{item.targetName}</h3>
@@ -421,7 +454,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/recent`);
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "최근 이력을 가져오지 못했습니다.");
+      if (!response.ok) throw new Error(data.message || "최근 이력을 불러오지 못했습니다.");
       setRecentItems(data);
     } catch {
       setRecentItems([]);
@@ -486,49 +519,60 @@ export default function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">AI Asset Evaluation Prototype</p>
-          <h1>금융상품 및 프로젝트 평가 시스템</h1>
+          <h1>금융상품 및 프로젝트 평가 대시보드</h1>
           <p className="hero-copy">
-            각 금융상품의 특성에 맞는 위험지표를 개별적으로 적용하였으며,<br />
-            절대적인 비교가 아닌 "상품별 리스크 판단"을 목적으로 설계되었습니다.<br />
-            상세보기를 열면 입력값 요약과 민감도 분석을 함께 확인할 수 있습니다.
+            각 금융상품의 특성에 맞는 위험지표를 개별적으로 적용하여
+            <br />
+            단순 비교가 아닌 상품별 리스크 판단을 돕는 목적으로 제작되었습니다.
+            <br />
+            상세 보기를 누르면 입력값 요약과 민감도 분석을 함께 확인할 수 있습니다.
           </p>
         </div>
         <div className="hero-panel">
           <span>워크플로우</span>
-          <strong>입력 → 평가 실행 → 상세 분석 → DB 저장</strong>
+          <strong>입력값 설정 → 평가 실행 → 상세 분석 → DB 저장</strong>
         </div>
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
       <section className="form-grid">
-        <form className="panel" onSubmit={(event) => {
-          event.preventDefault();
-          evaluate(
-            "stock",
-            {
-              ...stockForm,
-              currentPrice: toNumber(stockForm.currentPrice),
-              expectedAnnualReturn: Number(stockForm.expectedAnnualReturn),
-              volatility: Number(stockForm.volatility),
-              holdingDays: Number(stockForm.holdingDays),
-              shares: Number(stockForm.shares),
-            },
-            setStockResult,
-            "stock",
-            "주식 평가에 실패했습니다."
-          );
-        }}>
+        <form
+          className="panel"
+          onSubmit={(event) => {
+            event.preventDefault();
+            evaluate(
+              "stock",
+              {
+                ...stockForm,
+                currentPrice: toNumber(stockForm.currentPrice),
+                expectedAnnualReturn: Number(stockForm.expectedAnnualReturn),
+                volatility: Number(stockForm.volatility),
+                holdingDays: Number(stockForm.holdingDays),
+                shares: Number(stockForm.shares),
+              },
+              setStockResult,
+              "stock",
+              "주식 평가에 실패했습니다.",
+            );
+          }}
+        >
           <div className="panel-title">
             <h2>주식 평가</h2>
-            <span>수익률·변동성 기준</span>
+            <span>수익률·변동성 기반</span>
           </div>
           <div className="field-grid">
             <label className="field">
               <span>종목명</span>
               <input value={stockForm.stockName} onChange={(e) => setStockForm({ ...stockForm, stockName: e.target.value })} />
             </label>
-            <MoneyField label="현재 주가" value={stockForm.currentPrice} wide onChange={(value) => setStockForm({ ...stockForm, currentPrice: value })} onAdjust={(direction) => setStockForm({ ...stockForm, currentPrice: adjustByPercent(stockForm.currentPrice, direction, 1) })} />
+            <MoneyField
+              label="현재 주가"
+              value={stockForm.currentPrice}
+              wide
+              onChange={(value) => setStockForm({ ...stockForm, currentPrice: value })}
+              onAdjust={(direction) => setStockForm({ ...stockForm, currentPrice: adjustByPercent(stockForm.currentPrice, direction, 1) })}
+            />
             <NumberField label="기대 연수익률" step="0.001" value={stockForm.expectedAnnualReturn} onChange={(value) => setStockForm({ ...stockForm, expectedAnnualReturn: value })} />
             <NumberField label="변동성" step="0.001" value={stockForm.volatility} onChange={(value) => setStockForm({ ...stockForm, volatility: value })} />
             <NumberField label="보유일수" value={stockForm.holdingDays} onChange={(value) => setStockForm({ ...stockForm, holdingDays: value })} />
@@ -537,66 +581,90 @@ export default function App() {
           <button className="primary-button" type="submit" disabled={loading}>주식 평가 실행</button>
         </form>
 
-        <form className="panel" onSubmit={(event) => {
-          event.preventDefault();
-          evaluate(
-            "bond",
-            {
-              ...bondForm,
-              faceValue: toNumber(bondForm.faceValue),
-              couponRate: Number(bondForm.couponRate),
-              marketYield: Number(bondForm.marketYield),
-              maturityYears: Number(bondForm.maturityYears),
-              confidenceLevel: Number(bondForm.confidenceLevel),
-            },
-            setBondResult,
-            "bond",
-            "채권 평가에 실패했습니다."
-          );
-        }}>
+        <form
+          className="panel"
+          onSubmit={(event) => {
+            event.preventDefault();
+            evaluate(
+              "bond",
+              {
+                ...bondForm,
+                faceValue: toNumber(bondForm.faceValue),
+                couponRate: Number(bondForm.couponRate),
+                marketYield: Number(bondForm.marketYield),
+                maturityYears: Number(bondForm.maturityYears),
+                confidenceLevel: Number(bondForm.confidenceLevel),
+              },
+              setBondResult,
+              "bond",
+              "채권 평가에 실패했습니다.",
+            );
+          }}
+        >
           <div className="panel-title">
             <h2>채권 평가</h2>
-            <span>금리 민감도 기준</span>
+            <span>금리 민감도 기반</span>
           </div>
           <div className="field-grid">
             <label className="field">
               <span>채권명</span>
               <input value={bondForm.bondName} onChange={(e) => setBondForm({ ...bondForm, bondName: e.target.value })} />
             </label>
-            <MoneyField label="액면가" value={bondForm.faceValue} wide onChange={(value) => setBondForm({ ...bondForm, faceValue: value })} onAdjust={(direction) => setBondForm({ ...bondForm, faceValue: adjustByPercent(bondForm.faceValue, direction, 1) })} />
-            <NumberField label="쿠폰금리" step="0.001" value={bondForm.couponRate} onChange={(value) => setBondForm({ ...bondForm, couponRate: value })} />
+            <MoneyField
+              label="액면가"
+              value={bondForm.faceValue}
+              wide
+              onChange={(value) => setBondForm({ ...bondForm, faceValue: value })}
+              onAdjust={(direction) => setBondForm({ ...bondForm, faceValue: adjustByPercent(bondForm.faceValue, direction, 1) })}
+            />
+            <NumberField
+              label="쿠폰금리"
+              step="0.001"
+              value={bondForm.couponRate}
+              onChange={(value) => setBondForm({ ...bondForm, couponRate: value })}
+              infoText="채권이 액면가를 기준으로 정기적으로 지급하는 약속 이자율입니다. 예를 들어 액면가 1,000만원에 쿠폰금리 5%면 연 50만원 수준의 이자를 지급하는 구조입니다."
+            />
             <NumberField label="시장수익률" step="0.001" value={bondForm.marketYield} onChange={(value) => setBondForm({ ...bondForm, marketYield: value })} />
             <NumberField label="만기(년)" value={bondForm.maturityYears} onChange={(value) => setBondForm({ ...bondForm, maturityYears: value })} />
           </div>
           <button className="primary-button" type="submit" disabled={loading}>채권 평가 실행</button>
         </form>
 
-        <form className="panel panel-project" onSubmit={(event) => {
-          event.preventDefault();
-          evaluate(
-            "project",
-            {
-              ...projectForm,
-              initialInvestment: toNumber(projectForm.initialInvestment),
-              discountRate: Number(projectForm.discountRate),
-              probabilityOfDefault: Number(projectForm.probabilityOfDefault),
-              cashFlows: projectForm.cashFlows.map((value) => toNumber(value)),
-            },
-            setProjectResult,
-            "project",
-            "프로젝트 평가에 실패했습니다."
-          );
-        }}>
+        <form
+          className="panel panel-project"
+          onSubmit={(event) => {
+            event.preventDefault();
+            evaluate(
+              "project",
+              {
+                ...projectForm,
+                initialInvestment: toNumber(projectForm.initialInvestment),
+                discountRate: Number(projectForm.discountRate),
+                probabilityOfDefault: Number(projectForm.probabilityOfDefault),
+                cashFlows: projectForm.cashFlows.map((value) => toNumber(value)),
+              },
+              setProjectResult,
+              "project",
+              "프로젝트 평가에 실패했습니다.",
+            );
+          }}
+        >
           <div className="panel-title">
             <h2>프로젝트 평가</h2>
-            <span>현금흐름 기준</span>
+            <span>현금흐름 기반</span>
           </div>
           <div className="field-grid">
             <label className="field">
               <span>프로젝트명</span>
               <input value={projectForm.projectName} onChange={(e) => setProjectForm({ ...projectForm, projectName: e.target.value })} />
             </label>
-            <MoneyField label="초기 투자비" value={projectForm.initialInvestment} wide onChange={(value) => setProjectForm({ ...projectForm, initialInvestment: value })} onAdjust={(direction) => setProjectForm({ ...projectForm, initialInvestment: adjustByPercent(projectForm.initialInvestment, direction, 1) })} />
+            <MoneyField
+              label="초기 투자비"
+              value={projectForm.initialInvestment}
+              wide
+              onChange={(value) => setProjectForm({ ...projectForm, initialInvestment: value })}
+              onAdjust={(direction) => setProjectForm({ ...projectForm, initialInvestment: adjustByPercent(projectForm.initialInvestment, direction, 1) })}
+            />
             <NumberField label="할인율" step="0.001" value={projectForm.discountRate} onChange={(value) => setProjectForm({ ...projectForm, discountRate: value })} />
             <NumberField label="부도확률" step="0.001" value={projectForm.probabilityOfDefault} onChange={(value) => setProjectForm({ ...projectForm, probabilityOfDefault: value })} />
             <CashFlowList cashFlows={projectForm.cashFlows} onChange={(cashFlows) => setProjectForm({ ...projectForm, cashFlows })} />
