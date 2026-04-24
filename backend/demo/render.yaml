@@ -1,8 +1,18 @@
 services:
   - type: web
     name: finance-evaluator-api
-    env: docker
-    plan: free
+    runtime: docker
     rootDir: backend/demo
-    dockerfilePath: ./Dockerfile
+    plan: free
     healthCheckPath: /api/evaluations/health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DB_URL
+        value: jdbc:postgresql://dpg-d7l2luhkh4rs73fgglig-a:5432/evaluation_rd15?sslmode=require
+      - key: DB_USERNAME
+        value: evaluation_rd15_user
+      - key: DB_PASSWORD
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
