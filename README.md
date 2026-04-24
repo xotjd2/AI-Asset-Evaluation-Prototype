@@ -36,18 +36,20 @@ Render 백엔드:
 - 필수 환경변수:
 - `DB_URL=jdbc:postgresql://dpg-d7l2luhkh4rs73fgglig-a:5432/evaluation_rd15?sslmode=require`
 - `DB_USERNAME=evaluation_rd15_user`
-- `DB_PASSWORD=실제 Render Postgres 비밀번호`
-- `CORS_ALLOWED_ORIGINS=https://<your-vercel-domain>`
+- `DB_PASSWORD=Render 대시보드에만 직접 입력`
+- `CORS_ALLOWED_ORIGINS=https://ai-asset-evaluation-prototype.vercel.app`
 
 Vercel 프론트엔드:
 
 - 설정 파일: `frontend/vercel.json`
 - 필수 환경변수:
-- `VITE_API_BASE_URL=https://<your-render-backend>.onrender.com`
+- `VITE_API_BASE_URL=https://ai-asset-evaluation-prototype.onrender.com`
 
 ## API
 
+- `POST /api/evaluations/stock`
 - `POST /api/evaluations/bond`
 - `POST /api/evaluations/project`
+- `POST /api/evaluations/save`
 - `GET /api/evaluations/recent`
 - `GET /api/evaluations/health`
