@@ -7,12 +7,15 @@ spring:
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: update
     show-sql: ${JPA_SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
+  thymeleaf:
+    check-template-location: false
   jackson:
     serialization:
       write-dates-as-timestamps: false
